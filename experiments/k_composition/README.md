@@ -121,3 +121,11 @@ Measure the induction score and the second-half loss each time. This is path pat
 | 4 | | | |
 | 5 | | | |
 | 6 | | | |
+
+## 9. Build log (model from scratch)
+Raw outputs: `results/k_composition/` (save with `python <script> | tee results/k_composition/<script>.txt`).
+
+| Piece | Date | Result | What I learned (draft, edit me) |
+|---|---|---|---|
+| 0 load weights | 2026-11-15 | 24 tensors, all fp16. No LN, no MLP. `mask` and `IGNORE` are buffers, not learned weights. W_E and W_U are not tied. | ~92% of parameters are W_E + W_U; the attention circuit is ~4.7M params. |
+| 1 zero-layer | 2026-11-15 | Shapes OK. Same token at pos 2 and 9 gives identical logits. Top predictions are mostly word-piece completions: ` cat`→`abolism`, ` sat`→`irical`, ` on`→` behalf`, `.`→`jpg`/`png`, BOS→`Q`/`Introduction`/`/*`. | The direct path `W_E W_U` (+ `b_U`) is a rank-≤768 approximation of a bigram table: P(next \| current token only). Without attention it can't use context, so it can't predict ` sat` after the 2nd ` cat`. |

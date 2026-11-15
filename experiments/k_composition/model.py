@@ -53,8 +53,8 @@ class Embed(nn.Module):
         self.W_E = nn.Parameter(W_E, requires_grad=False)  # [d_vocab, d_model]
 
     def forward(self, tokens: torch.Tensor) -> torch.Tensor:
-        # tokens [batch, pos] (int64)  ->  [batch, pos, d_model]
-        return self.W_E[tokens]
+        # tokens [batch, pos] (int64)  ->  [batch, pos, d_model] ->[batch_size, sequence_length, d_model]
+        return self.W_E[tokens] # this expression directly indexes by the token ids to get the embedding for each token in the batch
 
 
 class PosEmbed(nn.Module):
