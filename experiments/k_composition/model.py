@@ -2,8 +2,8 @@
 
 Built piece by piece:
     piece 1: weight loader, Embed, PosEmbed, Unembed
-    piece 2 (this file so far): Attention
-    piece 3: the full model + activation cache + interventions
+    piece 2: Attention
+    piece 3 (this file so far): the full model (cache + interventions: you design them next)
 
 Shape names used in every comment:
     batch, pos            one prompt per batch row, one token per position
@@ -151,6 +151,39 @@ class Attention(nn.Module):
 
         cache = dict(q=q, k=k, v=v, scores=scores, pattern=pattern, z=z, head_out=head_out)
         return attn_out, cache
+
+
+class AttnOnlyTransformer(nn.Module):
+    """The full model: embed -> attn layer 0 -> attn layer 1 -> unembed. Nothing else.
+
+    The residual stream is a running sum. Each layer READS the current sum and ADDS its output:
+        resid_0 = W_E[tokens]                              what the tokens are
+        resid_1 = resid_0 + attn0(resid_0, pos)            + what layer 0 moved
+        resid_2 = resid_1 + attn1(resid_1, pos)            + what layer 1 moved
+        logits  = resid_2 @ W_U + b_U
+    So layer 1 sees everything layer 0 wrote. That is the only way composition can happen.
+    No LayerNorm between layers (normalization_type=None), so the sum is literally a sum.
+    """
+
+    def __init__(self, sd: dict[str, torch.Tensor]):
+        super().__init__()
+        self.embed = Embed(sd["embed.W_E"])
+        self.pos_embed = PosEmbed(sd["pos_embed.W_pos"])
+        self.layers = nn.ModuleList([Attention(sd, layer=0), Attention(sd, layer=1)])
+        self.unembed = Unembed(sd["unembed.W_U"], sd["unembed.b_U"])
+
+    @classmethod
+    def from_pretrained(cls, path: str | None = None, device: str = "cpu") -> "AttnOnlyTransformer":
+        return cls(load_state_dict(path)).to(device)
+
+    def forward(self, tokens: torch.Tensor) -> torch.Tensor:
+        # tokens [batch, pos]  ->  logits [batch, pos, d_vocab]
+        resid = self.embed(tokens)  # [batch, pos, d_model]
+        pos_vectors = self.pos_embed(tokens)  # [batch, pos, d_model]  fed to every layer's Q and K
+        for attn in self.layers:
+            attn_out, _ = attn(resid, pos_vectors)  # attn_out [batch, pos, d_model]; 2nd output unused (for now)
+            resid = resid + attn_out
+        return self.unembed(resid)  # [batch, pos, d_vocab]
 
 
 if __name__ == "__main__":
