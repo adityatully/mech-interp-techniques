@@ -5,7 +5,12 @@ Metric   : none yet; we print name, shape and dtype for each tensor.
 Expected : you predict the shapes BEFORE running (fill PREDICTIONS below).
 
 Model facts (from ARENA 1.2's HookedTransformerConfig):
-    d_model=768, d_head=64, n_heads=12, n_layers=2, n_ctx=2048, d_vocab=50278
+    d_model=768, 
+    d_head=64, 
+    n_heads=12, 
+    n_layers=2, 
+    n_ctx=2048,  context winow size is 2048 tokens
+    d_vocab=50278
     attn_only=True          -> no MLPs
     normalization_type=None -> no LayerNorm anywhere
     positional_embedding_type="shortformer"
@@ -14,7 +19,8 @@ Model facts (from ARENA 1.2's HookedTransformerConfig):
     tokenizer = EleutherAI/gpt-neox-20b
 Known answer (ARENA): 0.7 = previous-token head; 1.4 and 1.10 = induction heads.
 
-Convention reminder: the checkpoint is in TransformerLens layout (tokens are ROWS):
+Convention reminder: the checkpoint is in TransformerLens layout (tokens are ROWS): each token is a row vector in the residual strea, 
+so like if we consdier only one token is [1x768] so each head would be like ex W_q = [768, 64] so q = [1x64]
     resid [pos, d_model];  W_Q[h] is [d_model, d_head], so q = resid @ W_Q[h]
 Your notes use columns and [out, in] weights, i.e. the transpose.
 
