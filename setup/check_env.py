@@ -6,7 +6,6 @@ Run on coe9 after setup_coe9.sh, with the interp env active:
 Each check prints OK / WARN / FAIL. Exit code is 1 if any check FAILs.
 """
 
-import importlib
 import importlib.metadata as md
 import os
 import shutil
@@ -75,25 +74,61 @@ else:
     report("FAIL", "gpu", "torch.cuda.is_available() is False")
 
 # --- 6. End-to-end: GPT-2 Small through TransformerLens ---------------------
+# TransformerLens 4.0 removed HookedTransformer. TransformerBridge wraps the
+# real HuggingFace model; enable_compatibility_mode() applies the same weight
+# processing HookedTransformer did (fold_ln, center_writing_weights,
+# center_unembed, fold_value_biases). Without it, logit lens / DLA numbers and
+# residual norms differ from ARENA's.
 # Known answer: top next token after this prompt is " Paris".
+device = "cuda" if torch.cuda.is_available() else "cpu"
+model = None
 try:
-    tl = importlib.import_module("transformer_lens")
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = tl.HookedTransformer.from_pretrained("gpt2", device=device)
+    from transformer_lens.model_bridge import TransformerBridge
+    model = TransformerBridge.boot_transformers("gpt2", device=device)
+    model.enable_compatibility_mode()
+    report("OK", "load gpt2 (TransformerBridge)", f"compatibility mode on, {device}")
+except Exception as e:  # noqa: BLE001 - report any failure, do not crash the check
+    report("FAIL", "load gpt2 (TransformerBridge)", f"{type(e).__name__}: {e}")
+
+if model is not None:
     prompt = "The Eiffel Tower is located in the city of"
-    tokens = model.to_tokens(prompt)                      # [batch, pos] = [1, n_pos], BOS at pos 0
-    logits, cache = model.run_with_cache(tokens)          # logits [batch, pos, d_vocab] = [1, n_pos, 50257]
-    resid = cache["resid_post", 11]                       # [batch, pos, d_model] = [1, n_pos, 768], last layer
-    assert logits.shape == (1, tokens.shape[1], model.cfg.d_vocab), logits.shape
-    assert resid.shape == (1, tokens.shape[1], model.cfg.d_model), resid.shape
-    top = model.to_string(logits[0, -1].argmax())
-    report("OK" if top == " Paris" else "WARN", "gpt2 forward pass",
-           f"top next token = {top!r} (expect ' Paris'), on {device}")
+    try:
+        tokens = model.to_tokens(prompt)                  # [batch, pos] = [1, n_pos], BOS at pos 0
+        logits, cache = model.run_with_cache(tokens)      # logits [batch, pos, d_vocab] = [1, n_pos, 50257]
+        assert logits.shape == (1, tokens.shape[1], model.cfg.d_vocab), logits.shape
+        top = model.to_string(logits[0, -1].argmax())
+        report("OK" if top == " Paris" else "WARN", "gpt2 forward pass",
+               f"top next token = {top!r} (expect ' Paris')")
+    except Exception as e:  # noqa: BLE001
+        report("FAIL", "gpt2 forward pass", f"{type(e).__name__}: {e}")
+        cache = None
+
+    # The bridge's canonical hook names are blocks.{i}.hook_in / hook_out.
+    # ARENA code uses the legacy names; check the alias layer serves them.
+    if cache is not None:
+        legacy_keys = {
+            "string key  blocks.11.hook_resid_post": "blocks.11.hook_resid_post",
+            "tuple key   ('resid_post', 11)": ("resid_post", 11),
+            "pattern     ('pattern', 5)": ("pattern", 5),
+        }
+        for label, key in legacy_keys.items():
+            try:
+                t = cache[key]
+                report("OK", f"cache[{label.split()[0]}]", f"{label.split(None, 2)[-1]} -> {list(t.shape)}")
+            except Exception as e:  # noqa: BLE001
+                report("WARN", f"cache[{label.split()[0]}]", f"{label.split(None, 2)[-1]} -> {type(e).__name__}: {e}")
+
+    # Weight shapes ARENA relies on: W_O [n_layers, n_heads, d_head, d_model].
+    try:
+        shape = list(model.W_O.shape)
+        report("OK" if shape == [12, 12, 64, 768] else "WARN", "W_O shape",
+               f"{shape} (expect [12, 12, 64, 768])")
+    except Exception as e:  # noqa: BLE001
+        report("WARN", "W_O shape", f"{type(e).__name__}: {e}")
+
     hub = os.path.join(os.environ.get("HF_HOME", ""), "hub")
     cached = os.path.isdir(hub) and any("gpt2" in d for d in os.listdir(hub))
     report("OK" if cached else "WARN", "weights cached in HF_HOME", hub)
-except Exception as e:  # noqa: BLE001 - report any failure, do not crash the check
-    report("FAIL", "gpt2 forward pass", f"{type(e).__name__}: {e}")
 
 print()
 print("FAILED: fix the FAIL lines above." if failed else "All checks passed.")
