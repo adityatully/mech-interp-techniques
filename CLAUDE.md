@@ -69,7 +69,7 @@ The point is that I can later catch bugs in LLM-written interp code. So:
 | RAM | 251 GB (~233 GB free), 2 GB swap |
 | GPU | 1 × RTX A5000 (Ampere), 24 GB VRAM, ~768 GB/s. bf16 yes, **no native FP8**. Shared but usually free. Driver 580. |
 | Root disk `/` | 1 TB NVMe, **~11 GB free. Never put large files here.** |
-| `/data` | 3.6 TB RAID (ext4), ~229 MB/s read. **My folder: `/data/coe9`. Probably no backup.** |
+| `/data` | 3.6 TB RAID (ext4), ~229 MB/s read. **My folder: `/data/btp`. Probably no backup.** |
 | Other | Possibly a separate 4 TB drive (to confirm with `lsblk`); if separate, use it for backups and cold storage. |
 
 Shared-machine rules:
@@ -81,10 +81,10 @@ Shared-machine rules:
 
 Set up by `setup/setup_coe9.sh`; checked by `setup/check_env.py`.
 
-- Conda envs on `/data/coe9/envs`:
+- Conda envs on `/data/btp/envs`:
   - `interp`: torch, transformer_lens, sae-lens, nnsight, transformers, accelerate, bitsandbytes, scikit-learn, jupyter
   - `gen`: vLLM only (it pins its own torch version; never install it into `interp`)
-- Env vars (in `~/.bashrc`): `HF_HOME=/data/coe9/hf_cache`, `PIP_CACHE_DIR`, `TORCH_HOME`, `TMPDIR` all on `/data/coe9`; `OMP_NUM_THREADS=4`, `MKL_NUM_THREADS=4`, `TOKENIZERS_PARALLELISM=false`, `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`.
+- Env vars (in `~/.bashrc`): `HF_HOME=/data/btp/hf_cache`, `PIP_CACHE_DIR`, `TORCH_HOME`, `TMPDIR` all on `/data/btp`; `OMP_NUM_THREADS=4`, `MKL_NUM_THREADS=4`, `TOKENIZERS_PARALLELISM=false`, `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`.
 - Model weights download automatically from the HF Hub into `HF_HOME` on first use. Gated models (Llama, Gemma) need `hf auth login`.
 - I connect with VS Code / Cursor Remote-SSH and use notebooks with the `interp (coe9)` kernel.
 
@@ -102,7 +102,7 @@ Set up by `setup/setup_coe9.sh`; checked by `setup/check_env.py`.
 - For attention patterns in HF/nnsight, load with `attn_implementation="eager"` (SDPA/Flash never builds the pattern matrix).
 - Quantized models: activations are fine (bf16); weight-based analysis needs dequantized weights. Validate 8-bit vs bf16 once per model (next-token KL, residual cosine per layer).
 - Reasoning models: generate traces with vLLM (env `gen`), save to disk, then analyse with ONE forward pass per trace in `interp`. Always use `tokenizer.apply_chat_template` (Qwen3: `enable_thinking`).
-- Activations are not stored on disk unless saved explicitly. Saved activation sets go in `/data/coe9/...`, never `/`.
+- Activations are not stored on disk unless saved explicitly. Saved activation sets go in `/data/btp/...`, never `/`.
 
 ## 7. Repo layout and conventions
 
@@ -117,7 +117,7 @@ arena/                 one folder per ARENA section, written from a blank file
 experiments/           my own tweaks and mini-projects outside ARENA
 interp_utils/          small helpers I have written and understood (no copied black boxes)
 notes/                 short summaries; longer notes live in my Notion ("mech interpretability" page and its sub-pages)
-results/               small outputs (plots, json). Large files go to /data/coe9/artifacts (gitignored)
+results/               small outputs (plots, json). Large files go to /data/btp/artifacts (gitignored)
 ```
 
 - Each README ends with "What I learned" and "Open questions" written by me (you may draft from our discussion, I edit).
