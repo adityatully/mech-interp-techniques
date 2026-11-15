@@ -93,8 +93,9 @@ Set up by `setup/setup_coe9.sh`; checked by `setup/check_env.py`.
 - VRAM budget: weights + CUDA context (~0.5 GB) + activations + KV cache + cached activations must fit in 24 GB.
 - Weights: params × bytes (bf16 = 2, int8 = 1, nf4 ≈ 0.55). 8B bf16 ≈ 16.4 GB (fits). 14B bf16 ≈ 28 GB (does NOT fit).
 - Model choice:
-  - GPT-2 Small / ≤1.5B: fp32 or bf16, TransformerLens
-  - 4–8B: bf16, `HookedTransformer.from_pretrained_no_processing(..., dtype=torch.bfloat16)` or nnsight
+  - TransformerLens is pinned to 4.x: `HookedTransformer` no longer exists. Load with `TransformerBridge.boot_transformers(name, device=..., dtype=...)` (from `transformer_lens.model_bridge`). Translate ARENA's `HookedTransformer` lines to this.
+  - GPT-2 Small / ≤1.5B: fp32 or bf16, `TransformerBridge` + `.enable_compatibility_mode()` (folds LN, centres writing weights and unembed, like old `HookedTransformer.from_pretrained`). Needed for logit lens / DLA / residual norms to match ARENA and published numbers.
+  - 4–8B: bf16, `TransformerBridge.boot_transformers(..., dtype=torch.bfloat16)` without compatibility mode (= old `from_pretrained_no_processing`), or nnsight
   - 14B: 8-bit (bitsandbytes) with nnsight; exact bf16 checks via `device_map="auto"` CPU offload (slow, PCIe-bound)
 - Always compute metrics (logit diffs, patching scores, KL) in fp32: `.float()`.
 - Never call a bare `run_with_cache` on long sequences for big models. Use `names_filter` (attention patterns grow with seq²).

@@ -71,7 +71,8 @@ conda activate "$ENVS_DIR/interp"
 pip install --upgrade pip
 # Default PyPI torch wheel ships CUDA 12.x; driver 580 supports it.
 pip install torch
-pip install transformer_lens sae-lens nnsight transformers accelerate bitsandbytes \
+# TransformerLens 4.x: HookedTransformer is gone; use TransformerBridge (see CLAUDE.md section 6).
+pip install "transformer_lens>=4.4,<5" sae-lens nnsight transformers accelerate bitsandbytes \
             scikit-learn jupyter ipykernel einops jaxtyping plotly matplotlib pandas tqdm
 python -m ipykernel install --user --name interp --display-name "interp (coe9)"
 conda deactivate
