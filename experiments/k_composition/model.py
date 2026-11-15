@@ -96,6 +96,7 @@ class Unembed(nn.Module):
 
 class Attention(nn.Module):
     """One attention layer: 12 heads in parallel, each reading and writing the residual stream.
+    we are keeping head_index as a dimension itself, but yeah can mostly ignore them for clarity. 
 
     Extra shape names: head = 12, d_head = 64, q_pos / k_pos = query / key position.
 
@@ -114,11 +115,11 @@ class Attention(nn.Module):
         super().__init__()
         p = f"blocks.{layer}.attn."
         for name in ["W_Q", "W_K", "W_V", "W_O", "b_Q", "b_K", "b_V", "b_O"]:
-            setattr(self, name, nn.Parameter(sd[p + name], requires_grad=False))
+            setattr(self, name, nn.Parameter(sd[p + name], requires_grad=False)) 
         self.d_head = self.W_Q.shape[-1]  # 64
 
     def forward(self, resid: torch.Tensor, pos_vectors: torch.Tensor) -> tuple[torch.Tensor, dict]:
-        # resid, pos_vectors [batch, pos, d_model]
+        # resid, pos_vectors [batch_size, pos or sequencelength, d_model]
         qk_input = resid + pos_vectors  # [batch, pos, d_model]  shortformer: position only here
         v_input = resid  # [batch, pos, d_model]
 
