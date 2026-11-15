@@ -1,8 +1,8 @@
 """ARENA's 2-layer attention-only model, written from scratch.
 
 Built piece by piece:
-    piece 1 (this file so far): weight loader, Embed, PosEmbed, Unembed
-    piece 2: Attention
+    piece 1: weight loader, Embed, PosEmbed, Unembed
+    piece 2 (this file so far): Attention
     piece 3: the full model + activation cache + interventions
 
 Shape names used in every comment:
@@ -92,6 +92,64 @@ class Unembed(nn.Module):
     def forward(self, resid: torch.Tensor) -> torch.Tensor:
         # resid [batch, pos, d_model]  ->  logits [batch, pos, d_vocab]
         return einops.einsum(resid, self.W_U, "batch pos d_model, d_model d_vocab -> batch pos d_vocab") + self.b_U
+
+
+class Attention(nn.Module):
+    """One attention layer: 12 heads in parallel, each reading and writing the residual stream.
+
+    Extra shape names: head = 12, d_head = 64, q_pos / k_pos = query / key position.
+
+    Weights for layer l (TransformerLens layout, tokens are rows):
+        W_Q, W_K, W_V  [head, d_model, d_head]   read:  q = x @ W_Q[h]     [pos, 64]
+        W_O            [head, d_head, d_model]   write: out = z @ W_O[h]   [pos, 768]
+        b_Q, b_K, b_V  [head, d_head]
+        b_O            [d_model]                 one bias for the whole layer, not per head
+    In your column notes these are W_Q[h].T = [64, 768] (out, in), etc.
+
+    Shortformer: Q and K read (resid + pos); V reads resid alone.
+    So WHERE a head looks can depend on position, but WHAT it moves (v, then W_O) cannot.
+    """
+
+    def __init__(self, sd: dict[str, torch.Tensor], layer: int):
+        super().__init__()
+        p = f"blocks.{layer}.attn."
+        for name in ["W_Q", "W_K", "W_V", "W_O", "b_Q", "b_K", "b_V", "b_O"]:
+            setattr(self, name, nn.Parameter(sd[p + name], requires_grad=False))
+        self.d_head = self.W_Q.shape[-1]  # 64
+
+    def forward(self, resid: torch.Tensor, pos_vectors: torch.Tensor) -> tuple[torch.Tensor, dict]:
+        # resid, pos_vectors [batch, pos, d_model]
+        qk_input = resid + pos_vectors  # [batch, pos, d_model]  shortformer: position only here
+        v_input = resid  # [batch, pos, d_model]
+
+        # ---- read: project into each head's 64-dim subspace --------------------------
+        q = einops.einsum(qk_input, self.W_Q, "batch pos d_model, head d_model d_head -> batch pos head d_head") + self.b_Q
+        k = einops.einsum(qk_input, self.W_K, "batch pos d_model, head d_model d_head -> batch pos head d_head") + self.b_K
+        v = einops.einsum(v_input, self.W_V, "batch pos d_model, head d_model d_head -> batch pos head d_head") + self.b_V
+
+        # ---- where to look: QK circuit ------------------------------------------------
+        # scores[b, h, i, j] = q_i . k_j / sqrt(d_head)
+        # Why the scale: if q and k entries have variance ~1, q.k is a sum of 64 terms with
+        # variance ~64. Dividing by sqrt(64) brings it back to ~1, so softmax doesn't saturate.
+        scores = einops.einsum(q, k, "batch q_pos head d_head, batch k_pos head d_head -> batch head q_pos k_pos")
+        scores = scores / self.d_head**0.5
+
+        # Causal mask: query i may only look at keys j <= i. Entries above the diagonal -> -inf,
+        # so softmax gives them exactly 0. (Every row keeps its diagonal, so no row is all -inf.)
+        seq_len = scores.shape[-1]
+        future = torch.triu(torch.ones(seq_len, seq_len, dtype=torch.bool, device=scores.device), diagonal=1)
+        scores = scores.masked_fill(future, float("-inf"))
+        pattern = scores.softmax(dim=-1)  # [batch, head, q_pos, k_pos], each row sums to 1
+
+        # ---- what to move: OV circuit -------------------------------------------------
+        # z_i = sum_j pattern[i, j] * v_j   (a weighted average of value vectors)
+        z = einops.einsum(pattern, v, "batch head q_pos k_pos, batch k_pos head d_head -> batch q_pos head d_head")
+        # Each head writes back into the 768-dim stream through its own W_O.
+        head_out = einops.einsum(z, self.W_O, "batch pos head d_head, head d_head d_model -> batch pos head d_model")
+        attn_out = head_out.sum(dim=2) + self.b_O  # [batch, pos, d_model]  heads simply add up
+
+        cache = dict(q=q, k=k, v=v, scores=scores, pattern=pattern, z=z, head_out=head_out)
+        return attn_out, cache
 
 
 if __name__ == "__main__":
