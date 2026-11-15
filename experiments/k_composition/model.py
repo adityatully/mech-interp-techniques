@@ -176,14 +176,31 @@ class AttnOnlyTransformer(nn.Module):
     def from_pretrained(cls, path: str | None = None, device: str = "cpu") -> "AttnOnlyTransformer":
         return cls(load_state_dict(path)).to(device)
 
-    def forward(self, tokens: torch.Tensor) -> torch.Tensor:
-        # tokens [batch, pos]  ->  logits [batch, pos, d_vocab]
+    def forward(self, tokens: torch.Tensor, return_cache: bool = False):
+        # tokens [batch, pos]  ->  logits [batch, pos, d_vocab]            (default)
+        #                      ->  (logits, cache)                          (if return_cache=True)
+        #
+        # cache is a flat dict keyed by (name, layer), like TransformerLens:
+        #   cache["pattern", 1]     [batch, head, q_pos, k_pos]   layer 1's attention pattern
+        #   cache["resid_pre", 1]   [batch, pos, d_model]         what layer 1 reads (= resid_0 + attn0 out)
+        #   cache["attn_out", 0]    [batch, pos, d_model]         what layer 0 adds to the stream
+        #   cache["resid_final"]    [batch, pos, d_model]         what the unembed reads (no layer number)
+        cache = {}
         resid = self.embed(tokens)  # [batch, pos, d_model]
         pos_vectors = self.pos_embed(tokens)  # [batch, pos, d_model]  fed to every layer's Q and K
-        for attn in self.layers:
-            attn_out, _ = attn(resid, pos_vectors)  # attn_out [batch, pos, d_model]; 2nd output unused (for now)
+        cache["pos_vectors"] = pos_vectors
+        for layer, attn in enumerate(self.layers):  # layer = 0, 1
+            cache["resid_pre", layer] = resid
+            attn_out, layer_cache = attn(resid, pos_vectors)  # layer_cache: q, k, v, scores, pattern, z, head_out
+            for name, tensor in layer_cache.items():
+                cache[name, layer] = tensor  # e.g. "pattern" -> cache["pattern", 0]
+            cache["attn_out", layer] = attn_out
             resid = resid + attn_out
-        return self.unembed(resid)  # [batch, pos, d_vocab]
+        cache["resid_final"] = resid
+        logits = self.unembed(resid)  # [batch, pos, d_vocab]
+        if return_cache:
+            return logits, cache
+        return logits
 
 
 if __name__ == "__main__":
