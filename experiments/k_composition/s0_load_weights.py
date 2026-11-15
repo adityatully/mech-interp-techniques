@@ -22,6 +22,8 @@ Run on coe9 (interp env):
     python experiments/k_composition/s0_load_weights.py
 """
 
+import sys
+
 import torch
 from huggingface_hub import hf_hub_download
 
@@ -40,7 +42,8 @@ FILENAME = "attn_only_2L_half.pth"  # 184 MB, lands in $HF_HOME (/data/coe9/hf_c
 # Anything in the file that is not a learned weight?  ?
 # ------------------------------------------------------------------------------------
 
-weights_path = hf_hub_download(repo_id=REPO_ID, filename=FILENAME)
+# Optional: pass a local .pth path as the first argument (e.g. if coe9 can't reach the HF Hub).
+weights_path = sys.argv[1] if len(sys.argv) > 1 else hf_hub_download(repo_id=REPO_ID, filename=FILENAME)
 state_dict = torch.load(weights_path, map_location="cpu", weights_only=True)  # dict[str, Tensor]
 
 print(f"{len(state_dict)} tensors in {weights_path}\n")
