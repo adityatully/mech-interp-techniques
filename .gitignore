@@ -3,7 +3,7 @@ __pycache__/
 *.pyc
 .ipynb_checkpoints/
 
-# Weights, caches, large activation files (these live on /data/btp, never in git)
+# Weights, caches, large activation files (these live on /data/coe9, never in git)
 *.pt
 *.pth
 *.bin

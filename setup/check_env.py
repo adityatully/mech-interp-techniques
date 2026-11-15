@@ -1,7 +1,7 @@
 """Check the `interp` environment on coe9.
 
 Run on coe9 after setup_coe9.sh, with the interp env active:
-    conda activate /data/btp/envs/interp && python setup/check_env.py
+    conda activate /data/coe9/envs/interp && python setup/check_env.py
 
 Each check prints OK / WARN / FAIL. Exit code is 1 if any check FAILs.
 """
@@ -11,7 +11,7 @@ import os
 import shutil
 import sys
 
-BASE = "/data/btp"
+BASE = "/data/coe9"
 failed = False
 
 

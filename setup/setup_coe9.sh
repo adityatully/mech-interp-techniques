@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Set up the mech-interp environment on coe9.
-# Everything heavy (conda, envs, caches, tmp) goes on /data/btp, never on / (~11 GB free).
+# Everything heavy (conda, envs, caches, tmp) goes on /data/coe9, never on / (~11 GB free).
 # Safe to re-run: each step skips itself if already done.
 #
 # Usage (on coe9, inside tmux):   bash setup/setup_coe9.sh
 set -euo pipefail
 
-BASE=/data/btp
+BASE=/data/coe9
 CONDA_DIR=$BASE/miniforge3
 ENVS_DIR=$BASE/envs
 PY_VER=3.11
