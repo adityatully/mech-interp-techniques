@@ -63,7 +63,7 @@ Find the exact subspace where a previous-token head **writes** and an induction 
   - **Previous-token score:** mean attention from i to i − 1
   - **Induction score:** mean attention from i to i − 49 (second half)
 - Also record the **loss on the second half**. This is the metric for every later step.
-- Expected result: one strong previous-token head in layer 0, and one strong induction head in layer 1.
+- Expected result: one strong previous-token head in layer 0 (0.7), and two induction heads in layer 1 (1.4, 1.10; ARENA).
 
 ### Step 2: Measure the overlap (weights only)
 
@@ -115,7 +115,7 @@ Measure the induction score and the second-half loss each time. This is path pat
 ## 8. Results log
 | Step | Date | Result | Notes |
 |---|---|---|---|
-| 1 | | | |
+| 1 | 2026-11-16 | Prev-token: 0.7 = 0.996 (next 0.9 = 0.28). Induction: **1.10 = 0.87, 1.4 = 0.66**, all others ≤ 0.04 (chance 0.014); layer 0 ≈ 0. Loss: 1st copy 14.57, 2nd copy 4.55 nats. Control (no repeat): induction ≤ 0.01, 2nd-half loss 14.29, prev-token unchanged. | Matches ARENA. Loss > ln(50278) = 10.8 on random tokens is guaranteed for any non-uniform model (cross-entropy ≥ entropy). Metric for later steps: 2nd-copy loss 4.55 and induction scores of 1.4 / 1.10. |
 | 2 | | | |
 | 3 | | | |
 | 4 | | | |

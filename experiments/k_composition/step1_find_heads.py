@@ -1,6 +1,7 @@
 """Step 1: find the previous-token and induction heads from behaviour.
 
-Question : which of the 24 heads attend to i-1 (previous token), and which attend to the
+Question : which of the 24 (we have 2 layers and 12 heads in each layer) 
+            heads attend to i-1 (previous token), and which attend to the
            token AFTER the previous copy of the current token (induction)?
 Metrics  :
   prev score      = mean pattern[i, i-1]    over queries 1..100
@@ -43,7 +44,7 @@ BATCH, SEQ_LEN = 20, 50  # 20 sequences, each 50 random tokens
 
 model = AttnOnlyTransformer.from_pretrained(device=device)
 tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_NAME)
-d_vocab = model.embed.W_E.shape[0]
+d_vocab = model.embed.W_E.shape[0]   #50288
 
 
 def make_tokens(repeat: bool) -> torch.Tensor:
@@ -62,7 +63,8 @@ def per_token_loss(logits: torch.Tensor, tokens: torch.Tensor) -> torch.Tensor:
         j = 50..99  -> tokens 51..100  (second copy)
     """
     log_probs = logits[:, :-1].float().log_softmax(dim=-1)  # [batch, 100, d_vocab]  fp32
-    targets = tokens[:, 1:]  # [batch, 100]
+    # we take logtis all for the first axes bcs that is the batch size, and the second is sequence legnth 
+    targets = tokens[:, 1:]  # [batch, 100] just an indexing rule only : means evyething , 1: means evcrythign starting from1 to end
     return -log_probs.gather(-1, targets[..., None])[..., 0]  # [batch, 100]
 
 
@@ -71,7 +73,7 @@ def head_scores(cache: dict) -> tuple[torch.Tensor, torch.Tensor]:
     prev, induction = [], []
     for layer in range(2):
         pattern = cache["pattern", layer]  # [batch, head, q_pos=101, k_pos=101]
-
+        # getting the cached patterns 
         # diagonal(offset=-d) collects pattern[i, i-d] for every query i >= d.
         # offset -1:  queries 1..100              -> 100 entries
         prev_diag = pattern.diagonal(offset=-1, dim1=-2, dim2=-1)  # [batch, head, 100]
